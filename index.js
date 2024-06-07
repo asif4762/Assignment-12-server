@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const cors = require('cors');
 const { MongoClient, ServerApiVersion } = require('mongodb');
+const { parse } = require('dotenv');
 require('dotenv').config();
 const port = process.env.PORT || 4000;
 
@@ -33,8 +34,16 @@ async function run() {
 
 
     app.get('/apartments', async(req, res) => {
-        const result = await apartmentCollection.find().toArray();
+      const page = parseInt(req.query.page);
+      const size = parseInt(req.query.size);
+      console.log('page = ', page, 'size = ', size)
+        const result = await apartmentCollection.find().skip(page * size).limit(size).toArray();
         res.send(result);
+    })
+
+    app.get('/apartment-count', async (req, res) => {
+      const count = await apartmentCollection.estimatedDocumentCount();
+      res.send({count});
     })
 
     // Send a ping to confirm a successful connection
