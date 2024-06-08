@@ -82,6 +82,14 @@ async function run() {
       }
     });
 
+    app.delete('/user/:email', async (req, res) => {
+      const { email } = req.params;
+      if (!email) {
+        return res.status(400).send({ error: 'Invalid request' });
+      }
+      
+    })
+
     app.post('/payment-history', async (req, res) => {
       try {
         const paymentData = req.body;
@@ -168,7 +176,7 @@ async function run() {
 
         if (isExist) {
           if (user.status === 'Requested') {
-            const result = await userCollection.updateOne(query, { $set: { status: user?.status } });
+            const result = await userCollection.updateOne(query, { $set: user });
             return res.send(result);
           } else {
             return res.send(isExist);
@@ -205,6 +213,11 @@ async function run() {
         res.status(500).send('Server error');
       }
     });
+
+    app.get('/users', async (req, res) => {
+      const result = await userCollection.find().toArray()
+      res.send(result);
+    })
 
     console.log('Connected to MongoDB successfully!');
   } catch (error) {
