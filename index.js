@@ -65,7 +65,10 @@ async function run() {
     const userCollection = client.db('rentease').collection('users');
     const paymentCollection = client.db('rentease').collection('payment');
     const anounceCollection = client.db('rentease').collection('anounce');
+    const couponCollection = client.db('rentease').collection('coupons');
 
+
+    app.get()
 
     app.post('/anouncement', async(req, res) => {
       const anounceData = req.body;
