@@ -64,6 +64,7 @@ async function run() {
     const apartmentCollection = client.db('rentease').collection('apartment');
     const userCollection = client.db('rentease').collection('users');
     const paymentCollection = client.db('rentease').collection('payment');
+    const anounceCollection = client.db('rentease').collection('anounce');
 
     app.put('/user/:email', async (req, res) => {
       const { email } = req.params;
@@ -87,8 +88,14 @@ async function run() {
       if (!email) {
         return res.status(400).send({ error: 'Invalid request' });
       }
-      
-    })
+      try {
+        const result = await userCollection.deleteOne({ email });
+        res.send(result);
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).send({ error: 'Internal server error', details: error.message });
+      }
+    });
 
     app.post('/payment-history', async (req, res) => {
       try {
