@@ -66,6 +66,31 @@ async function run() {
     const paymentCollection = client.db('rentease').collection('payment');
     const anounceCollection = client.db('rentease').collection('anounce');
 
+
+    app.post('/anouncement', async(req, res) => {
+      const anounceData = req.body;
+      if (!anounceData) {
+        return res.status(400).send({ error: 'Invalid request' });
+      }
+      try {
+        const result = await anounceCollection.insertOne(anounceData);
+        res.send(result);
+      } catch (error) {
+        console.error('Error inserting anounce:', error);
+        res.status(500).send({ error: 'Internal server error', details: error.message });
+      }
+    })
+
+    app.get('/announcements', async (req, res) => {
+      try {
+        const result = await anounceCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        console.error('Error getting announcements:', error);
+        res.status(500).send({ error: 'Internal server error', details: error.message });
+      }
+    })
+
     app.put('/user/:email', async (req, res) => {
       const { email } = req.params;
       const changedData = req.body;
