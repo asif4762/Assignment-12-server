@@ -120,6 +120,22 @@ async function run() {
       }
     });
 
+   app.delete('/coupons/:id', async (req, res) => {
+     const { id } = req.params;
+     if (!id) {
+       return res.status(400).send({ error: "Invalid request" });
+     }
+     try {
+       const result = await couponCollection.deleteOne({ _id: ObjectId(id) });
+       res.send(result);
+     } catch (error) {
+       console.error("Error deleting coupon:", error);
+       res
+        .status(500)
+        .send({ error: "Internal server error", details: error.message });
+     }
+   })
+
     app.post("/anouncement", async (req, res) => {
       const anounceData = req.body;
       if (!anounceData) {
