@@ -68,7 +68,29 @@ async function run() {
     const couponCollection = client.db('rentease').collection('coupons');
 
 
-    app.get()
+    app.get('/coupons', async (req, res) => {
+      try {
+        const result = await couponCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        console.error('Error getting coupons:', error);
+        res.status(500).send({ error: 'Internal server error', details: error.message });
+      }
+    })
+
+    app.post('/coupons', async (req, res) => {
+      const couponData = req.body;
+      if (!couponData) {
+        return res.status(400).send({ error: 'Invalid request' });
+      }
+      try {
+        const result = await couponCollection.insertOne(couponData);
+        res.send(result);
+      } catch (error) {
+        console.error('Error inserting coupon:', error);
+        res.status(500).send({ error: 'Internal server error', details: error.message });
+      }
+    })
 
     app.post('/anouncement', async(req, res) => {
       const anounceData = req.body;
