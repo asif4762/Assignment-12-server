@@ -1,61 +1,219 @@
+require('dotenv').config(); // Ensure this is at the very top
 const express = require('express');
-const app = express();
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
-const { parse } = require('dotenv');
-require('dotenv').config();
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const nodemailer = require('nodemailer');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+const app = express();
 const port = process.env.PORT || 4000;
 
-//middleware
-app.use(cors())
-app.use(express.json())
+// Middleware
+app.use(cors({
+  origin: ["http://localhost:5173"],
+  credentials: true,
+}));
+app.use(express.json());
+
+const sendEmail = async (emailAddress, emailData) => {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.TRANSPORTER_EMAIL,
+        pass: process.env.TRANSPORTER_PASS,
+      },
+    });
+
+    await transporter.verify();
+
+    const mailBody = {
+      from: `"RentEase" <${process.env.TRANSPORTER_EMAIL}>`,
+      to: emailAddress,
+      subject: emailData.subject,
+      html: emailData.message,
+    };
+
+    await transporter.sendMail(mailBody);
+    console.log('Email sent successfully');
+  } catch (error) {
+    console.error('Error sending email:', error);
+  }
+};
 
 app.get('/', (req, res) => {
-    res.send('Assignment 12 is running');
-})
-
+  res.send('Assignment 12 is running');
+});
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.rurzeff.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
 });
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-    const apartmentCollection = await client.db('rentease').collection('apartment')
+    const apartmentCollection = client.db('rentease').collection('apartment');
+    const userCollection = client.db('rentease').collection('users');
+    const paymentCollection = client.db('rentease').collection('payment');
 
+    app.put('/user/:email', async (req, res) => {
+      const { email } = req.params;
+      const changedData = req.body;
+      console.log(changedData);
+      if (!email || !changedData) {
+        return res.status(400).send({ error: 'Invalid request' });
+      }
+    
+      try {
+        await userCollection.updateOne({ email }, { $set: changedData });
+        res.send({ message: 'User updated successfully' });
+      } catch (error) {
+        console.error('Error updating user:', error);
+        res.status(500).send({ error: 'Internal server error', details: error.message });
+      }
+    });
 
-    app.get('/apartments', async(req, res) => {
-      const page = parseInt(req.query.page);
-      const size = parseInt(req.query.size);
-      console.log('page = ', page, 'size = ', size)
+    app.post('/payment-history', async (req, res) => {
+      try {
+        const paymentData = req.body;
+        const result = await paymentCollection.insertOne(paymentData);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Server error');
+      }
+    });
+
+    app.get('/payment-history/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      try {
+          const result = await paymentCollection.find(query).toArray();
+          res.send(result);
+      } catch (error) {
+          console.error('Error fetching payment history:', error);
+          res.status(500).send({ error: 'Internal server error' });
+      }
+    });
+
+    app.post('/create-payment-intent', async (req, res) => {
+      const { rent } = req.body;
+      const rentIntent = parseInt(rent * 100);
+
+      if (!rent || rentIntent < 1) {
+        return res.status(400).send({ error: 'Invalid rent amount' });
+      }
+
+      try {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: rentIntent,
+          currency: 'usd',
+          payment_method_types: ['card'],
+        });
+        res.send({ client_secret: paymentIntent.client_secret });
+      } catch (error) {
+        console.error('Error creating payment intent:', error);
+        res.status(500).send({ error: 'Internal server error', details: error.message });
+      }
+    });
+
+    app.get('/apartments', async (req, res) => {
+      try {
+        const page = parseInt(req.query.page) || 0;
+        const size = parseInt(req.query.size) || 10;
         const result = await apartmentCollection.find().skip(page * size).limit(size).toArray();
         res.send(result);
-    })
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Server error');
+      }
+    });
+
+    app.get('/apartments/:id', async (req, res) => {
+      try {
+        const { id } = req.params;
+        const query = { _id: new ObjectId(id) };
+        const result = await apartmentCollection.findOne(query);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Server error');
+      }
+    });
 
     app.get('/apartment-count', async (req, res) => {
-      const count = await apartmentCollection.estimatedDocumentCount();
-      res.send({count});
-    })
+      try {
+        const count = await apartmentCollection.estimatedDocumentCount();
+        res.send({ count });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Server error');
+      }
+    });
 
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
-  } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
+    app.put('/user', async (req, res) => {
+      try {
+        const user = req.body;
+        const query = { email: user?.email };
+        const isExist = await userCollection.findOne(query);
+
+        if (isExist) {
+          if (user.status === 'Requested') {
+            const result = await userCollection.updateOne(query, { $set: { status: user?.status } });
+            return res.send(result);
+          } else {
+            return res.send(isExist);
+          }
+        }
+
+        const option = { upsert: true };
+        const updateDoc = {
+          $set: {
+            ...user,
+            timestamp: Date.now(),
+          },
+        };
+        const result = await userCollection.updateOne(query, updateDoc, option);
+        await sendEmail(user?.email, {
+          subject: 'Welcome to RentEase!',
+          message: 'Hope you will find your apartment',
+        });
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Server error');
+      }
+    });
+
+    app.get('/user/:email', async (req, res) => {
+      try {
+        const { email } = req.params;
+        const query = { email };
+        const result = await userCollection.findOne(query);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Server error');
+      }
+    });
+
+    console.log('Connected to MongoDB successfully!');
+  } catch (error) {
+    console.error('Failed to connect to MongoDB', error);
   }
 }
+
 run().catch(console.dir);
 
 app.listen(port, () => {
-    console.log(`Assignment 12 is listening on port ${port}`)
-})
+  console.log(`Assignment 12 is listening on port ${port}`);
+});
