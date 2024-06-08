@@ -126,7 +126,7 @@ async function run() {
        return res.status(400).send({ error: "Invalid request" });
      }
      try {
-       const result = await couponCollection.deleteOne({ _id: ObjectId(id) });
+       const result = await couponCollection.deleteOne({ _id: new ObjectId(id) });
        res.send(result);
      } catch (error) {
        console.error("Error deleting coupon:", error);
@@ -332,7 +332,7 @@ async function run() {
       }
     });
 
-    app.get("/users", verifyToken, async (req, res) => {
+    app.get("/users", async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     });
